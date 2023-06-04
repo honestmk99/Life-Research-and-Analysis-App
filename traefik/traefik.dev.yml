@@ -1,0 +1,22 @@
+# traefik.dev.toml
+
+# listen on port 80
+entryPoints:
+  web:
+    address: ":80"
+
+
+# Traefik dashboard over http
+api:
+  insecure: true
+
+log:
+  level: "DEBUG"
+
+accessLog:
+
+# containers are not discovered automatically
+providers:
+  docker:
+    defaultRule: "Host(`{{ trimPrefix `/` .Name }}.docker.localhost`)"
+    exposedByDefault: false

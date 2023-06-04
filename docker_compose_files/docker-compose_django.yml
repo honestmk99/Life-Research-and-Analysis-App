@@ -1,0 +1,138 @@
+version: "3.8"
+
+services:
+
+    api:
+        build:
+            context: .
+            dockerfile: ./django/Dockerfile
+        # command: bash -c "cd /code/api && python manage.py runserver"
+        # command: bash -c "cd /code/api && python3 manage.py migrate"
+        #  container_name: api
+        env_file: env_files/.env
+        volumes:
+            #      - ./django:/code/api
+            - image-storage:/image-storage
+            - cache-storage:/cache-storage
+        expose:
+            - 8000
+        ports:
+            - 8000:8000
+        depends_on:
+            - db
+            - broker
+        #    command: bash -c "cd /code/api && gunicorn backend.wsgi:application --bind 0.0.0.0:8000 --timeout 36000"
+        command: sh ./run_django.sh
+
+    db:
+        image: mariadb
+        restart: always
+        volumes:
+            - ./docker/sql:/docker-entrypoint-initdb.d
+            - db-data:/var/lib/mysql
+        env_file: env_files/.env
+        ports:
+            - 3306:3306
+
+    ## stitching worker
+    stitching_worker:
+        build:
+            context: .
+            dockerfile: ./stitching/Dockerfile
+        restart: "no"
+        env_file: env_files/.env
+        #    command: ["celery", "worker", "--app=celery_worker.app", "--concurrency=1", "--hostname=worker@%h", "--loglevel=INFO"]
+        volumes:
+            - image-storage:/image-storage
+            - cache-storage:/cache-storage
+        depends_on:
+            - broker
+
+    ## worker broker
+    broker:
+        image: rabbitmq:3-management
+        env_file: env_files/.env
+        ports:
+            - 5672:5672
+            - 15672:15672 # management
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+
+    ## celery monitor
+    flower:
+        image: zoomeranalytics/flower:0.9.1-4.0.2
+        restart: "no"
+        env_file: env_files/.env
+        ports:
+            - "5555:5555"
+        depends_on:
+            - broker
+    #  ui:
+    #    build: ./vue
+    #    command: npm run serve
+    #    container_name: ui
+    #    volumes:
+    #      - ./vue:/code/ui
+    #    expose:
+    #      - 8080
+    #    ports:
+    #      - 8080:8080
+    #    depends_on:
+    #      - api
+    #    networks:
+    #      - custom_network
+
+    # nginx:
+    #   build: ./docker/nginx
+    #   container_name: nginx
+    #   restart: always
+    #   ports:
+    #     - 81:80
+    #   networks:
+    #     - custom_network
+    #   environment:
+    #     TZ: Asia/Tokyo
+    #     CLIENT_MAX_BODY_SIZE: 64M
+
+    # code-server:
+    #   image: ghcr.io/linuxserver/code-server
+    #   container_name: code-server
+    #   environment:
+    #     - PUID=1000
+    #     - PGID=1000
+    #     - TZ=Asia/Tokyo
+    #     - PASSWORD=Password1
+    #   volumes:
+    #     - .:/code
+    #   ports:
+    #     - 8888:8443
+    #   restart: unless-stopped
+
+
+volumes:
+    db-data: {}
+
+    #  # using local volumes with absolute path for development.
+    #  # specific path set to personal development folder
+    #  image-storage:
+    #    driver: local
+    #    driver_opts:
+    #      o: bind
+    #      type: none
+    #      device: c:/Users/anon/Documents/Programming/_work/IAS-project/image-storage
+    #
+    #  cache-storage:
+    #    driver: local
+    #    driver_opts:
+    #      o: bind
+    #      type: none
+    #      device: c:/Users/anon/Documents/Programming/_work/IAS-project/cache-storage
+
+    image-storage:
+    cache-storage:
+
+        #networks:
+        #  custom_network:
+        #    driver: bridge

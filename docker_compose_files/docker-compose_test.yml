@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+
+    example:
+        build:
+            context: .
+            dockerfile: ./example/Dockerfile
+        env_file: env_files/.env
+        volumes:
+            - image-storage:/code/image_storage
+            - image-cache:/code/image_cache
+
+volumes:
+
+    image-storage:
+        driver: local
+        driver_opts:
+            o: bind
+            type: none
+            device: c:/Users/anon/Documents/Programming/_work/IAS-project/image_storage
+
+    image-cache:
+        driver: local
+        driver_opts:
+            o: bind
+            type: none
+            device: c:/Users/anon/Documents/Programming/_work/IAS-project/image_cache
+
+#  image-cache2:
+#    driver: local
+#    driver_opts:
+#      o: bind
+#      type: none
+#      device: ./image_cache
+
+#
+#  ## using external for development, volumes must be created manually prior to running docker-compose up
+#  image-storage:
+#    - external: true
+#  image-cache:
+#    - external: true
+
+#networks:
+#  custom_network:
+#    driver: bridge

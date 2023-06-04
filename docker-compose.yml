@@ -1,0 +1,103 @@
+version: "4.12"
+services:
+    mainapi:
+        build:
+            context: .
+            dockerfile: ./mainApi/Dockerfile
+        ports:
+            - 8000:8000
+        env_file:
+            - ./env_files/fastApi.env
+            - ./env_files/mongoDB_connect.env
+            - ./env_files/celery_tasks.env
+        depends_on:
+            - mongo
+            - rabbitmq
+        volumes:
+            - image-storage:/image-storage
+            - cache-storage:/cache-storage
+            - ./mainApi:/app/mainApi:rm
+            - ./docker_compose_libs/shared_utils:/app/shared_utils:rm
+            - ./docker_compose_libs/celery_tasks:/app/celery_tasks:rm
+        command: [ "sh", "./mainApi/start.sh" ]
+    # nginx:
+    #   depends_on: 
+    #       - mainApi
+    #   container_name: proxy-app
+    #   build: 
+    #       context: ./react/
+    #       dockerfile: Dockerfile
+    #   ports: 
+    #       - "3000:3000"
+    #   restart: always
+    mongo:
+        image: mongo:latest
+        restart: unless-stopped
+        ports:
+            - 27017
+        volumes:
+            - mongoDbData:/data/db
+        env_file:
+            - ./env_files/mongoDb.env
+    mongo-express:
+        image: mongo-express
+        restart: unless-stopped
+        ports:
+            - 8081:8081
+        env_file:
+            - ./env_files/mongo-express.env
+        depends_on:
+            - mongo
+    rabbitmq:
+        image: rabbitmq:3-management
+        env_file:
+            - ./env_files/celery_tasks.env
+        ports:
+            - 5672:5672
+            - 15672:15672 # management
+        restart: unless-stopped
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+    ## celery monitor
+    flower:
+        image: zoomeranalytics/flower:0.9.1-4.0.2
+        restart: "no"
+        env_file:
+            - ./env_files/celery_tasks.env
+        ports:
+            - 5555:5555
+        depends_on:
+            - rabbitmq
+    ## stitching worker
+    stitching_worker:
+        build:
+            context: .
+            dockerfile: ./stitching/Dockerfile
+        restart: "no"
+        env_file:
+            - ./env_files/celery_tasks.env
+        command:
+            [
+                "celery",
+                "-A",
+                "main",
+                "worker",
+                "--concurrency=4",
+                "--loglevel=info",
+                "-n",
+                "stitching_worker.%h"
+            ]
+        volumes:
+            - image-storage:/image-storage
+            - cache-storage:/cache-storage
+            # - ./stitching:/app
+            # - ./docker_compose_libs/shared_utils:/app/shared_utils:ro
+            # - ./docker-compose-libs/celery_tasks:/app/celery_tasks:ro
+        depends_on:
+            - rabbitmq
+volumes:
+    mongoDbData:
+    image-storage:
+    cache-storage:

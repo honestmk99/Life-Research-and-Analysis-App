@@ -1,0 +1,9 @@
+*.pyc
+*.egg-info
+dist
+
+ashlar/jars
+
+*.tif
+*.rcpnl
+output/*

@@ -1,0 +1,22 @@
+FROM tiangolo/uvicorn-gunicorn:python3.8-slim
+
+# additional dependencies
+# netcat used for checking for resources on the network before start, see start.sh for use
+RUN apt-get update && \
+    apt-get install -y netcat
+
+WORKDIR /app
+
+COPY ./mainApi/requirements.txt /app/requirements.txt
+
+RUN pip install --upgrade -r /app/requirements.txt
+
+EXPOSE 8000
+
+COPY ./mainApi /app/mainApi/
+
+## Copy shared
+COPY ./docker-compose-libs/shared_utils /app/shared_utils/
+COPY ./docker-compose-libs/celery_tasks/ /app/celery_tasks/
+
+

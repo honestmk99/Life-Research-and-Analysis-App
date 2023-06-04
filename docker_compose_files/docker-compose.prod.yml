@@ -1,0 +1,181 @@
+version: "3.8"
+
+services:
+
+    mainapi:
+        build:
+            context: .
+            dockerfile: mainApi/Dockerfile.prod # production Dockerfile
+        ports:
+            - 8000:8000
+        env_file:
+            - ./env_files/fastApi.env
+            - ./env_files/mongoDB_connect.env
+            - ./env_files/celery_tasks.env
+        depends_on:
+            - mongo
+            - rabbitmq
+        #      - redis
+
+        volumes:
+            - image-storage:/image-storage
+            - cache-storage:/cache-storage
+
+        labels:
+            - "traefik.enable=true"
+            #      - "traefik.http.routers.fastapi.rule=Host(`fastapi-traefik.your-domain.com`)"
+            - "traefik.http.routers.fastapi.rule=Host(`fastapi-traefik.your-domain.com`)"
+            - "traefik.http.routers.fastapi.tls=true"
+            - "traefik.http.routers.fastapi.tls.certresolver=letsencrypt"
+
+        #    command: ["sleep", "20s"]
+        #    command: ["uvicorn", "mainApi.app:app", "--host", "0.0.0.0", "--port", "8000"]
+        command: [ "sh", "./mainApi/start.sh" ]
+
+    traefik:
+        build:
+            context: .
+            dockerfile: traefik/Dockerfile
+        ports:
+            - 8008:80
+            - 8081:8080
+        volumes:
+            - ./traefik/traefik.prod.toml:/etc/traefik/traefik.toml # use the production config
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    mongo:
+        image: mongo:latest
+        restart: unless-stopped
+        ports:
+            - 27017
+        volumes:
+            - mongoDbData:/data/db
+        env_file:
+            - ./env_files/mongoDb.env
+
+    mongo-express:
+        image: mongo-express
+        restart: unless-stopped
+        ports:
+            - 8081:8081
+        env_file:
+            - ./env_files/mongo-express.env
+        depends_on:
+            - mongo
+
+    ## worker broker
+    rabbitmq:
+        image: rabbitmq:3-management
+        env_file:
+            - ./env_files/celery_tasks.env
+        ports:
+            - 5672:5672
+            - 15672:15672 # management
+        restart: unless-stopped
+        deploy:
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+
+    ## celery monitor
+    flower:
+        image: zoomeranalytics/flower:0.9.1-4.0.2
+        restart: "no"
+        env_file:
+            - ./env_files/celery_tasks.env
+        ports:
+            - "5555:5555"
+        depends_on:
+            - rabbitmq
+
+    #  ## for task results
+    #  redis:
+    #    image: redis:latest
+    #    ports:
+    #      - "6379:6379"
+
+    ## stitching worker
+    stitching_worker:
+        build:
+            context: .
+            dockerfile: ./stitching/Dockerfile
+        restart: "no"
+        env_file:
+            - ./env_files/celery_tasks.env
+        #    command: ["celery", "worker", "--app=celery_worker.app", "--concurrency=1", "--hostname=worker@%h", "--loglevel=INFO"]
+        #    command: ["celery", "--app=stitching.main", "worker", "--concurrency=4", "--loglevel=INFO", "-n stitching_worker.%h"]
+        command:
+            [
+                "celery",
+                "-A",
+                "main",
+                "worker",
+                "--concurrency=4",
+                "--loglevel=info",
+                "-n",
+                "stitching_worker.%h"
+            ]
+        volumes:
+            - image-storage:/image-storage
+            - cache-storage:/cache-storage
+
+            - ./stitching:/app
+            - ./docker-compose-libs/shared_utils:/app/shared_utils:ro
+            - ./docker-compose-libs/celery_tasks:/app/celery_tasks:ro
+
+        depends_on:
+            - rabbitmq
+    #      - redis
+
+    #  ui:
+    #    build: ./vue
+    #    command: npm run serve
+    #    container_name: ui
+    #    volumes:
+    #      - ./vue:/code/ui
+    #    expose:
+    #      - 8080
+    #    ports:
+    #      - 8080:8080
+    #    depends_on:
+    #      - api
+    #    networks:
+    #      - custom_network
+
+    # nginx:
+    #   build: ./docker/nginx
+    #   container_name: nginx
+    #   restart: always
+    #   ports:
+    #     - 81:80
+    #   networks:
+    #     - custom_network
+    #   environment:
+    #     TZ: Asia/Tokyo
+    #     CLIENT_MAX_BODY_SIZE: 64M
+
+
+volumes:
+    mongoDbData:
+
+    # using local volumes with absolute path for development.
+    # specific path set to personal development folder
+    #  image-storage:
+    #    driver: local
+    #    driver_opts:
+    #      o: bind
+    #      type: none
+    #      device: c:/Users/anon/Documents/Programming/_work/IAS-project-fastApi/_tmp/image-storage
+    #
+    #  cache-storage:
+    #    driver: local
+    #    driver_opts:
+    #      o: bind
+    #      type: none
+    #      device: c:/Users/anon/Documents/Programming/_work/IAS-project-fastApi/_tmp/cache-storage
+
+    image-storage:
+    cache-storage:
+        #networks:
+        #  custom_network:
+        #    driver: bridge
