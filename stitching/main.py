@@ -45,6 +45,7 @@ def ashlar_stitch(tiles, pattern):
     )
 
     # output result to array in python -> need to perform cropping
+    
     merged = mosaic.run(mode='return')
     merged = mosaic.run(mode='write')
     print(f"mosaic took: {time.perf_counter() - start: 0.4f} seconds")

@@ -29,6 +29,7 @@ async def create_user(user: CreateUserModel, db: AsyncIOMotorDatabase) -> Create
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
 
+
     # turn user into a dictionary so that we can add keys
     new_user_dict = user.dict()
     new_user_dict['created_at'] = datetime.now().strftime("%m/%d/%y %H:%M:%S")
